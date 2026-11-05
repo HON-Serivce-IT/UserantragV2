@@ -71,6 +71,14 @@ export async function me() {
   return graph("/me?$select=displayName,mail,userPrincipalName");
 }
 
+// Prüft, ob der angemeldete Benutzer Mitglied der Admin-Gruppe ist
+export async function isInGroup(groupName) {
+  if (!groupName) return false;
+  if (CONFIG.demo) return false;
+  const r = await graph(`/me/transitiveMemberOf/microsoft.graph.group?$filter=${E(`displayName eq '${q(groupName)}'`)}&$count=true&$select=id`, { advanced: true });
+  return (r.value || []).length > 0;
+}
+
 const HOTEL_COLS = ["cra69_hotelstammdaten_databaseid", "cra69_hotelname_string", "cra69_dorinthnr", "cra69_telephone", "cra69_domain",
   "cra69_dc", "cra69_cloud", "cra69_street", "cra69_zip", "cra69_city", "cra69_state", "cra69_country", "cra69_company",
   "cra69_domainadmin", "cra69_outarget", "cra69_netbiosname"];

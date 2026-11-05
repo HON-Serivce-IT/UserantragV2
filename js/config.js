@@ -45,6 +45,11 @@ export const CONFIG = {
   excludeNames: ["DOR", "HOM", "Reservierung", "Bankett", "Sales", "Info", "Empfang", "Restaurant",
                  "Technik", "Botschafter", "Personal", "HSK", "Kueche"],
 
+  // Admins: sehen zusätzlich „Automatisch berechnet“ und „Daten an Dataverse“.
+  // E-Mail-Adressen (klein geschrieben) und/oder Name einer Entra-Gruppe.
+  admins: ["mohammed.babat@honestis.ag"],
+  adminGroup: "",
+
   // Support & Handbuch
   supportMail: "it-support@dorint.com",
   supportPhone: "+49 221 48901-1199",

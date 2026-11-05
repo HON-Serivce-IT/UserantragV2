@@ -32,6 +32,9 @@ async function boot() {
       api.loadOptionSet(CONFIG.optionSets.verteiler), api.loadOptionSet(CONFIG.optionSets.abteilung), api.loadOptionSet(CONFIG.optionSets.shortkey)
     ]);
     S.me = me; S.hotels = hotels;
+    S.isAdmin = (CONFIG.demo && !new URLSearchParams(location.search).has("hr")) || CONFIG.admins.map(a => a.toLowerCase()).includes(myMail())
+             || (CONFIG.admins.map(a => a.toLowerCase()).includes((me.userPrincipalName || "").toLowerCase()))
+             || await api.isInGroup(CONFIG.adminGroup).catch(() => false);
     S.opts = { verteiler: verteiler.map(o => o.label).sort((a, b) => a.localeCompare(b, "de")),
                abteilung: abteilung.map(o => o.label), shortkey: shortkey.map(o => o.label).sort() };
     S.departments = await api.loadDepartments(shortkey, abteilung);
@@ -134,7 +137,11 @@ function keepFocus(fn) {
   if (id) { const n = document.getElementById(id); if (n) { n.focus(); try { if (pos != null) n.setSelectionRange(pos, pos); } catch {} } }
 }
 
+const split = () => `<div class="split${S.isAdmin ? "" : " noaside"}">`;
+
+// Nur für Admins sichtbar
 function techPanel(computed, method, entity, payload) {
+  if (!S.isAdmin) return "";
   return `<aside class="tech panel">
     <div class="sec"><h2>Automatisch berechnet</h2><dl class="kv">${Object.entries(computed).map(([k, v]) => `<dt>${k}</dt><dd>${esc(v) || "–"}</dd>`).join("")}</dl></div>
     <details class="sec"><summary>Daten an Dataverse</summary>
@@ -216,7 +223,7 @@ const checkUpn = debounce(async () => {
 function viewNeu(v) {
   const h = S.hotel, n = S.neu, c = neuCalc();
   v.innerHTML = `<h1>Neuen Benutzer anmelden</h1><p class="sub">${esc(h.name)} · ${esc(h.nr)}</p>
-  <div class="split"><div class="panel">
+  ${split()}<div class="panel">
     <div class="sec"><h2>Persönliche Daten</h2><div class="grid">
       ${fText("n_vorname", "Vorname", n.vorname, { req: 1, err: c.errs.vorname && "Umlaute, ß und Leerzeichen sind nicht erlaubt", hint: "Ohne Umlaute, z. B. Mueller statt Müller" })}
       ${fText("n_nachname", "Nachname", n.nachname, { req: 1, err: c.errs.nachname && "Umlaute, ß und Leerzeichen sind nicht erlaubt" })}
@@ -333,7 +340,7 @@ function viewEdit(v) {
   const h = S.hotel, e = S.edit, u = e.u, c = editCalc();
   const zeiten = Array.from({ length: 48 }, (_, i) => `${String(i >> 1).padStart(2, "0")}:${i % 2 ? "30" : "00"}`);
   v.innerHTML = `<h1>${esc(u.givenName)} ${esc(u.surname)}</h1><p class="sub">${esc(u.userPrincipalName)} · ${esc(u.officeLocation || h.name)}</p>
-  <div class="split"><div class="panel">
+  ${split()}<div class="panel">
     <div class="sec"><h2>Persönliche Daten</h2><div class="grid">
       ${fText("e_vorname", "Vorname", e.vorname, { err: !L.nameOk(e.vorname) && "Umlaute, ß und Leerzeichen sind nicht erlaubt" })}
       ${fText("e_nachname", "Nachname", e.nachname, { err: !L.nameOk(e.nachname) && "Umlaute, ß und Leerzeichen sind nicht erlaubt" })}
@@ -397,7 +404,7 @@ function viewGen(v) {
     busy: '<div class="status">Wird geprüft …</div>', error: '<div class="status err">Prüfung fehlgeschlagen. Bitte erneut versuchen.</div>' }[g.checked]
     || `<small>Erlaubt: @${CONFIG.allowedGenericDomains.join(", @")}</small>`;
   v.innerHTML = `<h1>Generisches Postfach erstellen</h1><p class="sub">${esc(h.name)}</p>
-  <div class="split"><div class="panel">
+  ${split()}<div class="panel">
     <div class="sec"><div class="note info">Ein generisches Postfach ist eine Mailadresse ohne Lizenzkosten, die ausschließlich vorhandenen persönlichen Konten zugewiesen wird. Eine Anmeldung am PC oder das Arbeiten mit Outlook und anderen Office-Programmen ist damit nicht möglich.</div></div>
     <div class="sec"><h2>Adresse</h2>
       <div class="field"><label for="g_mail">E-Mail-Adresse <span class="req">*</span></label>
@@ -450,7 +457,7 @@ const opForm = (p, o) => `<div class="grid">
 function viewOpNeu(v) {
   const h = S.hotel, o = S.opNeu;
   v.innerHTML = `<h1>Opera-Benutzer erstellen</h1><p class="sub">Nur Zugang zu Opera PMS, kein M365-Konto · ${esc(h.name)}</p>
-  <div class="split"><div class="panel"><div class="sec">${opForm("o_", o)}</div>
+  ${split()}<div class="panel"><div class="sec">${opForm("o_", o)}</div>
   <div class="actions"><button class="btn ghost" id="o_back">Abbrechen</button><button class="btn" id="o_send" ${opValid(o) ? "" : "disabled"}>Opera-Benutzer beantragen</button></div></div>
   ${techPanel({ "Anzeigename": L.anzeigename(o.vorname, o.nachname) }, "POST", CONFIG.tables.antraege, opPayload(o, h))}</div>`;
   bind(o, opMap("o_"), () => keepFocus(() => viewOpNeu(v)));
@@ -472,7 +479,7 @@ async function viewOpEdit(v) {
   }
   const list = S.operaList, o = S.opEdit;
   v.innerHTML = `<h1>Opera-Benutzer bearbeiten</h1><p class="sub">Opera-Anträge am Standort ${esc(h.name)}</p>
-  <div class="split"><div class="panel"><div class="sec"><div class="field"><label for="oe_pick">Opera-Benutzer auswählen</label>
+  ${split()}<div class="panel"><div class="sec"><div class="field"><label for="oe_pick">Opera-Benutzer auswählen</label>
   ${list === undefined ? "<small>Wird geladen …</small>" : `<select id="oe_pick"><option value="">Bitte auswählen</option>${list.map(x =>
     `<option value="${esc(x.cra69_userantragid)}" ${o && o.id === x.cra69_userantragid ? "selected" : ""}>${esc(x.cra69_anzeigename || L.anzeigename(x.cra69_vorname, x.cra69_nachname))}</option>`).join("")}</select>
     ${list.length ? "" : "<small>Für diesen Standort gibt es noch keine Opera-Anträge.</small>"}`}</div></div>
