@@ -1,0 +1,13 @@
+{
+  "globalHeaders": {
+    "Content-Security-Policy": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self' https://login.microsoftonline.com https://graph.microsoft.com https://org95513c9a.crm4.dynamics.com; frame-src https://login.microsoftonline.com; frame-ancestors 'none'; base-uri 'self'; form-action 'self'",
+    "X-Content-Type-Options": "nosniff",
+    "Referrer-Policy": "strict-origin-when-cross-origin",
+    "Permissions-Policy": "camera=(), microphone=(), geolocation=()"
+  },
+  "routes": [
+    { "route": "/js/*", "headers": { "Cache-Control": "no-cache" } },
+    { "route": "/index.html", "headers": { "Cache-Control": "no-cache" } }
+  ],
+  "mimeTypes": { ".js": "text/javascript" }
+}
