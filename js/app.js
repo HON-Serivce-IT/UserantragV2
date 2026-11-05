@@ -81,7 +81,7 @@ function resetForms() {
   S.neu = { vorname: "", nachname: "", durchwahl: "", mobil: "0", abteilung: "", zusatz: ["AL"], position: "", datev: false, jedox: false,
             nhsales: false, onventis: false, opera: false, hw: false, bemerkung: "", verteiler: [], eintritt: "", drucker: "", teamviewer: "", upnTaken: false };
   S.edit = null; S.users = null; S.search = "";
-  S.gen = { mail: "", checked: null, freigabe: [], search: "", hits: [] };
+  S.gen = { mail: "", checked: null, freigabe: [], search: "" };
   S.opNeu = { vorname: "", nachname: "", telefon: "", mobil: "", abteilung: "", position: "", eintritt: "", bemerkung: "" };
   S.opEdit = null; S.operaList = null;
 }
@@ -271,30 +271,43 @@ function viewNeu(v) {
 // =====================================================================
 //  Benutzerverwaltung (Overview Screen)
 // =====================================================================
-const loadUsers = debounce(async () => {
-  const term = S.search;
+// Benutzer am Standort einmal laden, danach lokal filtern
+async function ensureHotelUsers(rerender) {
+  if (S.hotelUsers && S.hotelUsers.hotelId === S.hotel.id) return;
+  if (S.hotelUsersLoading === S.hotel.id) return;
+  S.hotelUsersLoading = S.hotel.id; S.usersErr = null;
   try {
-    const list = await api.searchUsers(S.hotel, term);
-    if (term !== S.search) return;
-    S.users = list.filter(u => !L.istFunktionspostfach(u)); S.usersErr = null;
-  } catch (e) { S.users = []; S.usersErr = e.message; }
-  if (S.view === "verwaltung") keepFocus(() => viewVerwaltung($("#view")));
-}, 350);
+    const list = await api.listUsersAtHotel(S.hotel);
+    S.hotelUsers = { hotelId: S.hotel.id, list: list.filter(u => !L.istFunktionspostfach(u)) };
+  } catch (e) { S.hotelUsers = { hotelId: S.hotel.id, list: [] }; S.usersErr = e.message; }
+  S.hotelUsersLoading = null;
+  rerender();
+}
+function filterUsers(term) {
+  const t = (term || "").trim().toLowerCase();
+  const list = S.hotelUsers?.list || [];
+  if (!t) return list;
+  return list.filter(u => `${u.givenName || ""} ${u.surname || ""} ${u.displayName || ""} ${u.userPrincipalName || ""} ${u.mail || ""}`.toLowerCase().includes(t));
+}
+const usersLoaded = () => S.hotelUsers && S.hotelUsers.hotelId === S.hotel.id;
+const initials = u => `${esc((u.givenName || u.displayName || "?")[0])}${esc((u.surname || "")[0] || "")}`;
+const leerText = h => `Keine aktiven Benutzer mit Bürostandort „${esc(h.name)}“ gefunden. Prüfen Sie in Entra ID, ob beim Benutzer unter „Bürostandort“ genau dieser Hotelname steht.`;
 
 function viewVerwaltung(v) {
   const h = S.hotel;
-  if (S.users === null) { S.users = undefined; loadUsers(); }
-  const list = S.users;
+  if (!usersLoaded()) ensureHotelUsers(() => { if (S.view === "verwaltung") keepFocus(() => viewVerwaltung($("#view"))); });
+  const list = usersLoaded() ? filterUsers(S.search) : undefined;
+  const total = usersLoaded() ? S.hotelUsers.list.length : 0;
   v.innerHTML = `<h1>Benutzer bearbeiten oder abmelden</h1>
-  <p class="sub">Aktive Konten am Standort ${esc(h.name)}. Funktionspostfächer (Empfang, Info, Bankett …) sind ausgeblendet.</p>
-  <div class="panel"><div class="sec"><label class="lbl" for="u_search">Mitarbeitende suchen</label><input type="search" id="u_search" placeholder="Name oder E-Mail" value="${esc(S.search)}"></div>
+  <p class="sub">Aktive Konten mit Bürostandort ${esc(h.name)}. Funktionspostfächer (Empfang, Info, Bankett …) sind ausgeblendet.</p>
+  <div class="panel"><div class="sec"><label class="lbl" for="u_search">Liste filtern${total ? ` · ${total} Benutzer` : ""}</label><input type="search" id="u_search" placeholder="Name oder E-Mail" value="${esc(S.search)}"></div>
   <div class="users">${list === undefined ? `<div class="empty">Benutzer werden geladen …</div>`
     : S.usersErr ? `<div class="empty err">${esc(S.usersErr)}</div>`
-    : list.length ? list.map(u => `<button class="urow" data-upn="${esc(u.userPrincipalName)}"><div class="uav">${esc((u.givenName || "?")[0])}${esc((u.surname || "")[0] || "")}</div>
-        <div><b>${esc(u.givenName)} ${esc(u.surname)}</b><div class="meta">${esc(u.jobTitle || "–")} · ${esc(u.department || "–")}</div></div><span class="badge">${esc(u.userPrincipalName)}</span></button>`).join("")
-    : `<div class="empty">Keine Treffer an diesem Standort.</div>`}</div></div>`;
+    : list.length ? list.map(u => `<button class="urow" data-upn="${esc(u.userPrincipalName)}"><div class="uav">${initials(u)}</div>
+        <div><b>${esc(u.displayName || `${u.givenName} ${u.surname}`)}</b><div class="meta">${esc(u.jobTitle || "–")} · ${esc(u.department || "–")}</div></div><span class="badge">${esc(u.userPrincipalName)}</span></button>`).join("")
+    : `<div class="empty">${total ? "Kein Treffer für diesen Filter." : leerText(h)}</div>`}</div></div>`;
   const s = $("#u_search");
-  s.oninput = () => { S.search = s.value; S.users = undefined; loadUsers(); keepFocus(() => viewVerwaltung(v)); };
+  s.oninput = () => { S.search = s.value; keepFocus(() => viewVerwaltung(v)); };
   v.querySelectorAll(".urow").forEach(r => r.onclick = () => openEdit(r.dataset.upn));
 }
 
@@ -395,17 +408,10 @@ function viewEdit(v) {
 // =====================================================================
 //  Generisches Postfach (CreateGenericScreen → cra69_userantrags)
 // =====================================================================
-const searchGen = debounce(async () => {
-  const g = S.gen, term = g.search;
-  if (!term.trim()) { g.hits = []; } else {
-    try { const r = await api.searchUsers(S.hotel, term); if (term !== g.search) return; g.hits = r.filter(u => !L.istFunktionspostfach(u)).slice(0, 8); }
-    catch (e) { g.hits = []; toast(e.message, "err"); }
-  }
-  if (S.view === "generisch") keepFocus(() => viewGen($("#view")));
-}, 350);
-
 function viewGen(v) {
   const h = S.hotel, g = S.gen;
+  if (!usersLoaded()) ensureHotelUsers(() => { if (S.view === "generisch") keepFocus(() => viewGen($("#view"))); });
+  const hits = usersLoaded() ? filterUsers(g.search) : undefined;
   const payload = { cra69_hotel: h.raw, cra69_apprunner: myMail(), cra69_generic: g.mail, cra69_freigabefur: g.freigabe.join(";") };
   const ready = g.checked === "ok" && g.freigabe.length > 0;
   const status = { ok: '<div class="status ok">Adresse ist verfügbar.</div>', exists: '<div class="status err">Diese Adresse existiert bereits im Tenant.</div>',
@@ -422,10 +428,13 @@ function viewGen(v) {
     </div>
     <div class="sec"><h2>Zugriff für</h2>
       <div class="picked">${g.freigabe.length ? g.freigabe.map(m => `<span class="chip" aria-pressed="true">${esc(m)}<button aria-label="${esc(m)} entfernen" data-rm="${esc(m)}">×</button></span>`).join("") : "<small>Noch niemand ausgewählt</small>"}</div>
-      <div class="field" style="margin-top:16px"><label for="g_search">Personen suchen</label><input id="g_search" type="search" value="${esc(g.search)}" placeholder="Name eingeben" autocomplete="off"></div>
-      <div class="users">${g.hits.map(u => `<div class="urow static"><div class="uav">${esc((u.givenName || "?")[0])}${esc((u.surname || "")[0] || "")}</div>
-        <div><b>${esc(u.givenName)} ${esc(u.surname)}</b><div class="meta">${esc(u.userPrincipalName)}</div></div>
-        <button class="btn sm ${g.freigabe.includes(u.userPrincipalName) ? "ghost" : ""}" data-add="${esc(u.userPrincipalName)}">${g.freigabe.includes(u.userPrincipalName) ? "Hinzugefügt" : "Hinzufügen"}</button></div>`).join("")}</div>
+      <div class="field" style="margin-top:16px"><label for="g_search">Benutzer am Standort ${esc(h.name)}</label><input id="g_search" type="search" value="${esc(g.search)}" placeholder="Liste filtern: Name oder E-Mail" autocomplete="off"></div>
+      <div class="users scroll">${hits === undefined ? `<div class="empty">Benutzer werden geladen …</div>`
+        : S.usersErr ? `<div class="empty err">${esc(S.usersErr)}</div>`
+        : hits.length ? hits.map(u => { const on = g.freigabe.includes(u.userPrincipalName); return `<div class="urow static"><div class="uav">${initials(u)}</div>
+          <div><b>${esc(u.displayName || `${u.givenName} ${u.surname}`)}</b><div class="meta">${esc(u.userPrincipalName)}</div></div>
+          <button class="btn sm ${on ? "ghost" : ""}" ${on ? `data-rm="${esc(u.userPrincipalName)}"` : `data-add="${esc(u.userPrincipalName)}"`}>${on ? "Entfernen" : "Hinzufügen"}</button></div>`; }).join("")
+        : `<div class="empty">${S.hotelUsers.list.length ? "Kein Treffer für diesen Filter." : leerText(h)}</div>`}</div>
     </div>
     <div class="actions"><button class="btn ghost" id="g_back">Abbrechen</button><button class="btn" id="g_next" ${ready ? "" : "disabled"}>Weiter</button></div>
   </div>
@@ -440,7 +449,7 @@ function viewGen(v) {
     try { g.checked = (await api.mailExists(g.mail)) ? "exists" : "ok"; } catch { g.checked = "error"; }
     viewGen(v);
   };
-  const s = $("#g_search"); s.oninput = () => { g.search = s.value; searchGen(); };
+  const s = $("#g_search"); s.oninput = () => { g.search = s.value; keepFocus(() => viewGen(v)); };
   v.querySelectorAll("[data-add]").forEach(b => b.onclick = () => { if (!g.freigabe.includes(b.dataset.add)) g.freigabe.push(b.dataset.add); viewGen(v); });
   v.querySelectorAll("[data-rm]").forEach(b => b.onclick = () => { g.freigabe = g.freigabe.filter(x => x !== b.dataset.rm); viewGen(v); });
   $("#g_back").onclick = () => { resetForms(); go("start"); };

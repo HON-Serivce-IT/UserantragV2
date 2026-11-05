@@ -116,19 +116,14 @@ export async function loadDepartments(shortkeyOpts, abteilungOpts) {
              .filter(r => r.shortKey);
 }
 
-// Benutzer am Standort suchen (Overview Screen → gal_Gallery)
-export async function searchUsers(hotel, term) {
-  if (CONFIG.demo) {
-    const t = term.toLowerCase();
-    return DEMO_USERS.filter(u => u.officeLocation.trim() === hotel.name && (!t || `${u.givenName} ${u.surname} ${u.userPrincipalName}`.toLowerCase().includes(t)));
-  }
+// Alle aktiven Benutzer mit Bürostandort (officeLocation) = Hotel
+// (ersetzt Office365-Benutzer.SearchUser; gefiltert wird danach lokal)
+export async function listUsersAtHotel(hotel) {
+  if (CONFIG.demo) { await wait(200); return DEMO_USERS.filter(u => u.officeLocation.trim() === hotel.name); }
   const loc = [...new Set([hotel.name, hotel.raw])].map(n => `officeLocation eq '${q(n)}'`).join(" or ");
-  const t = term.trim().replace(/"/g, "");
-  let path = `/users?$filter=${E(`(${loc}) and accountEnabled eq true`)}&$count=true&$top=50` +
-             `&$select=id,givenName,surname,displayName,jobTitle,department,userPrincipalName,officeLocation`;
-  path += t ? `&$search=${E(`"displayName:${t}" OR "userPrincipalName:${t}"`)}` : `&$orderby=displayName`;
-  const r = await graph(path, { advanced: true });
-  return r.value || [];
+  const path = `/users?$filter=${E(`(${loc}) and accountEnabled eq true`)}&$count=true&$top=999&$orderby=displayName` +
+               `&$select=id,givenName,surname,displayName,jobTitle,department,userPrincipalName,mail,officeLocation`;
+  return graphAll(path, { advanced: true });
 }
 
 // Details für „Benutzer bearbeiten“ inkl. Gruppen und Zusatztools
