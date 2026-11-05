@@ -105,9 +105,12 @@ function render() {
 // =====================================================================
 //  Formular-Bausteine
 // =====================================================================
+// E-Mail-Felder als type="text" (inputmode=email): Bei type="email" erlaubt der Browser
+// keine Cursor-Position, nach dem Neuzeichnen würde rückwärts geschrieben.
+const inputType = type => type === "email" ? `type="text" inputmode="email" autocapitalize="off" spellcheck="false"` : `type="${type}"`;
 const fText = (id, label, val, { req, hint, ph, ro, err, warn, type = "text", full } = {}) =>
   `<div class="field ${full ? "full" : ""}"><label for="${id}">${label}${req ? ' <span class="req">*</span>' : ""}</label>
-   <input id="${id}" type="${type}" value="${esc(val)}" ${ph ? `placeholder="${esc(ph)}"` : ""} ${ro ? "readonly" : ""} class="${err ? "bad" : ""}" autocomplete="off">
+   <input id="${id}" ${inputType(type)} value="${esc(val)}" ${ph ? `placeholder="${esc(ph)}"` : ""} ${ro ? "readonly" : ""} class="${err ? "bad" : ""}" autocomplete="off">
    ${err ? `<span class="error">${err}</span>` : warn ? `<span class="warnline">${warn}</span>` : hint ? `<small>${hint}</small>` : ""}</div>`;
 const fSelect = (id, label, val, opts, { req, full } = {}) =>
   `<div class="field ${full ? "full" : ""}"><label for="${id}">${label}${req ? ' <span class="req">*</span>' : ""}</label>
@@ -134,7 +137,13 @@ function keepFocus(fn) {
   const a = document.activeElement, id = a && a.id; let pos = null;
   try { pos = a.selectionStart; } catch {}
   fn();
-  if (id) { const n = document.getElementById(id); if (n) { n.focus(); try { if (pos != null) n.setSelectionRange(pos, pos); } catch {} } }
+  if (!id) return;
+  const n = document.getElementById(id); if (!n) return;
+  n.focus();
+  try {
+    const p = pos != null ? pos : (n.value || "").length;   // Fallback: Cursor ans Ende
+    n.setSelectionRange(p, p);
+  } catch {}
 }
 
 const split = () => `<div class="split${S.isAdmin ? "" : " noaside"}">`;
@@ -408,7 +417,7 @@ function viewGen(v) {
     <div class="sec"><div class="note info">Ein generisches Postfach ist eine Mailadresse ohne Lizenzkosten, die ausschließlich vorhandenen persönlichen Konten zugewiesen wird. Eine Anmeldung am PC oder das Arbeiten mit Outlook und anderen Office-Programmen ist damit nicht möglich.</div></div>
     <div class="sec"><h2>Adresse</h2>
       <div class="field"><label for="g_mail">E-Mail-Adresse <span class="req">*</span></label>
-      <div class="inline"><input id="g_mail" type="email" value="${esc(g.mail)}" placeholder="bankett.${esc(h.nr.toLowerCase())}@dorint.com" autocomplete="off"><button class="btn ghost" id="g_check" ${g.mail ? "" : "disabled"}>Prüfen</button></div>
+      <div class="inline"><input id="g_mail" ${inputType("email")} value="${esc(g.mail)}" placeholder="bankett.${esc(h.nr.toLowerCase())}@dorint.com" autocomplete="off"><button class="btn ghost" id="g_check" ${g.mail ? "" : "disabled"}>Prüfen</button></div>
       ${status}</div>
     </div>
     <div class="sec"><h2>Zugriff für</h2>
