@@ -322,8 +322,11 @@ function editCalc() {
     cra69_cloudmemberofdelete: ""
   };
   const dErr = (e.austritt && e.austritt < L.heute()) || (e.letzterTag && e.letzterTag < L.heute());
-  const valid = e.abteilung && !vertErr && !dErr && L.nameOk(e.vorname) && L.nameOk(e.nachname);
-  return { tel, payload, vertErr, dErr, valid };
+  // Flow „Userantrag_bearbeiten“ erkennt eine Abmeldung nur am Austrittsdatum,
+  // der „User_Controller“ braucht zusätzlich den letzten Arbeitstag → beide Pflicht.
+  const beideErr = abmeldung && !(e.austritt && e.letzterTag);
+  const valid = e.abteilung && !vertErr && !dErr && !beideErr && L.nameOk(e.vorname) && L.nameOk(e.nachname);
+  return { tel, payload, vertErr, dErr, beideErr, abmeldung, valid };
 }
 
 function viewEdit(v) {
@@ -349,12 +352,15 @@ function viewEdit(v) {
         ${fChips("e_verteiler", "Verteilerlisten (aktuelle Mitgliedschaften vorbelegt)", S.opts.verteiler, e.verteiler, { mono: false })}
       </div>
     </div>
-    <div class="sec"><h2>Abmeldung</h2><div class="grid">
-      ${fText("e_austritt", "Austrittsdatum", e.austritt, { type: "date" })}
-      <div class="field"><label for="e_letzter">Letzter Arbeitstag</label><div class="inline"><input id="e_letzter" type="date" value="${esc(e.letzterTag)}">
+    <div class="sec"><h2>Abmeldung</h2>
+      ${c.abmeldung ? `<div class="note info" style="margin-bottom:24px">Bei einer Abmeldung bearbeitet die IT nur den Austritt. Andere Änderungen in diesem Antrag werden nicht übernommen.</div>` : ""}
+      <div class="grid">
+      ${fText("e_austritt", "Austrittsdatum", e.austritt, { type: "date", req: !!c.abmeldung, hint: "Ab diesem Tag gilt der Benutzer als ausgetreten" })}
+      <div class="field"><label for="e_letzter">Letzter Arbeitstag${c.abmeldung ? ' <span class="req">*</span>' : ""}</label><div class="inline"><input id="e_letzter" type="date" value="${esc(e.letzterTag)}">
         <select id="e_zeit" class="time" aria-label="Uhrzeit">${zeiten.map(t => `<option ${t === e.letzteZeit ? "selected" : ""}>${t}</option>`).join("")}</select></div></div>
       ${fText("e_vertreter", "Vertretung (E-Mail)", e.vertreter, { type: "email", req: !!(e.austritt || e.letzterTag), err: c.vertErr, hint: "Pflicht bei Abmeldung. Nicht die eigene Adresse eintragen.", full: 1 })}
       ${c.dErr ? '<div class="note full">Datum darf nicht in der Vergangenheit liegen.</div>' : ""}
+      ${c.beideErr ? '<div class="note full">Für eine Abmeldung bitte Austrittsdatum und letzten Arbeitstag mit Uhrzeit angeben.</div>' : ""}
     </div></div>
     <div class="actions"><button class="btn ghost" id="e_back">Zurück zur Liste</button><button class="btn" id="e_next" ${c.valid ? "" : "disabled"}>Weiter</button></div>
   </div>
